@@ -1,0 +1,156 @@
+---
+title: "Coursera DSS Machine Learning Course Project"
+author: "Paul Venuto"
+date: "December 24, 2017"
+output: html_document
+---
+
+## Executive Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of this project is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## About the Data
+
+The data for this project are available here: Training dataset: “https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv”. Testing dataset: “https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv” The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## Data Processing
+
+### Obtaining and Cleaning the data
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Load required libraries
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+library(RColorBrewer)
+library(randomForest)
+library(knitr)
+
+#setting the seed for reproducible computation
+set.seed(12345)
+
+#setting the working directory folder
+setwd("~/Documents/Coursera")
+
+# loading both testing and training dataset (considering both files were already downloaded)
+trainFile <- "./pml-training.csv"
+training <- read.csv(file=trainFile, header=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))
+testFile <- "./pml-testing.csv"
+testing <- read.csv(file=testFile, header=TRUE, sep=",", na.strings=c("NA","#DIV/0!",""))
+
+dim(training)
+```
+
+```{r}
+#Remove near zero values from the dataset
+nzvCol <- nearZeroVar(training)
+training <- training[,-nzvCol]
+
+#Remove any with NA's or have empty strings, and the one's that are not predictors variables
+filterData <- function(idf) {
+    idx.keep <- !sapply(idf, function(x) any(is.na(x)))
+    idf <- idf[, idx.keep]
+    idx.keep <- !sapply(idf, function(x) any(x==""))
+    idf <- idf[, idx.keep]
+    
+    # Remove the columns that aren't the predictor variables
+    col.rm <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+                "cvtd_timestamp", "new_window", "num_window")
+    idx.rm <- which(colnames(idf) %in% col.rm)
+    idf <- idf[, -idx.rm]
+    return(idf)
+}
+
+training <- filterData(training)
+finalTrainingDS <- training
+dim(finalTrainingDS)
+```
+
+```{r}
+#Perform the same cleaning process to the testing dataset as well
+nzvCol <- nearZeroVar(testing)
+testing <- testing[,-nzvCol]
+testing <- filterData(testing)
+finalTestingDS <- testing
+dim(finalTestingDS)
+```
+
+##Data Partitioning
+
+Now we’ll partition the data into training and vaidation datasets.
+
+```{r}
+inTrain <- createDataPartition(y=finalTrainingDS$classe, p=0.70, list=FALSE)
+training <- finalTrainingDS[inTrain, ]
+validation <- finalTrainingDS[-inTrain, ]
+dim(training); dim(validation)
+```
+
+##Data Modelling
+
+We will fit 3 models for predictive analysis to determine the most accurate algorithm to use for this dataset.
+
+###1st method: Decision Tree
+
+```{r}
+#fit model
+modelTree <- rpart(classe~., data=training, method="class")
+prp(modelTree)
+#predict the model on the validation data set.
+predictTree <- predict(modelTree, validation, type = "class")
+confMatDecTree <- confusionMatrix(predictTree, validation$classe)
+#plot matrix results
+plot(confMatDecTree$table, col = confMatDecTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatDecTree$overall['Accuracy'], 4)))
+```
+
+###2nd method: Generalized Boosting
+
+```{r}
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=training, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+modFitGBM$finalModel
+#predict the model on the validation data set.
+predictGBM <- predict(modFitGBM, newdata=validation)
+confMatGBM <- confusionMatrix(predictGBM, validation$classe)
+confMatGBM
+# plot matrix results
+plot(confMatGBM$table, col = confMatGBM$byClass, 
+     main = paste("GBM - Accuracy =", round(confMatGBM$overall['Accuracy'], 4)))
+```
+
+###3rd method: Random Forest
+
+```{r}
+#fit model
+modelRF <- train(classe ~ ., data = training, method = "rf", trControl = trainControl(method = "cv", 5), ntree = 250)
+modelRF
+#prediction on validation dataset
+predictRF <- predict(modelRF, validation)
+confMatRF <- confusionMatrix(validation$classe, predictRF)
+confMatRF
+# plot matrix results
+plot(confMatRF$table, col = confMatRF$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                  round(confMatRF$overall['Accuracy'], 4)))
+```
+
+The accuracy of the 3 regression modeling methods above are:
+
+Random Forest=0.9881; Decision Tree=0.722; GBM=0.9565. Therefore, the Random Forest model will be applied to predict the 20 quiz results (testing dataset) as shown below.
+
+###Predicting The Manner of Exercise for Test Data Set
+
+```{r}
+predict(modelRF, testing[, -length(names(testing))])
+predict
+```
