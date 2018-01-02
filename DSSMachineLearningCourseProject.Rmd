@@ -1,8 +1,10 @@
 ---
 title: "Coursera DSS Machine Learning Course Project"
 author: "Paul Venuto"
-date: "December 24, 2017"
+date: "January 1, 2018"
 output: html_document
+fig_width: 5
+fig_height: 3
 ---
 
 ## Executive Summary
@@ -102,7 +104,6 @@ We will fit 3 models for predictive analysis to determine the most accurate algo
 ```{r}
 #fit model
 modelTree <- rpart(classe~., data=training, method="class")
-prp(modelTree)
 #predict the model on the validation data set.
 predictTree <- predict(modelTree, validation, type = "class")
 confMatDecTree <- confusionMatrix(predictTree, validation$classe)
@@ -152,5 +153,4 @@ Random Forest=0.9881; Decision Tree=0.722; GBM=0.9565. Therefore, the Random For
 
 ```{r}
 predict(modelRF, testing[, -length(names(testing))])
-predict
 ```
